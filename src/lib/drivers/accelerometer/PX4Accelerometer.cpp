@@ -37,49 +37,18 @@
 #include <lib/drivers/device/Device.hpp>
 
 PX4Accelerometer::PX4Accelerometer(uint32_t device_id, uint8_t priority, enum Rotation rotation) :
-	CDev(nullptr),
 	ModuleParams(nullptr),
 	_sensor_accel_pub{ORB_ID(sensor_accel), priority},
+	_device_id(device_id),
 	_rotation{rotation}
 {
-	_class_device_instance = register_class_devname(ACCEL_BASE_DEVICE_PATH);
-
 	_sensor_accel_pub.get().device_id = device_id;
 	_sensor_accel_pub.get().scaling = 1.0f;
 
 	// set software low pass filter for controllers
 	updateParams();
-	configure_filter(_param_imu_accel_cutoff.get());
-}
-
-PX4Accelerometer::~PX4Accelerometer()
-{
-	if (_class_device_instance != -1) {
-		unregister_class_devname(ACCEL_BASE_DEVICE_PATH, _class_device_instance);
-	}
-}
-
-int
-PX4Accelerometer::ioctl(cdev::file_t *filp, int cmd, unsigned long arg)
-{
-	switch (cmd) {
-	case ACCELIOCSSCALE: {
-			// Copy offsets and scale factors in
-			accel_calibration_s cal{};
-			memcpy(&cal, (accel_calibration_s *) arg, sizeof(cal));
-
-			_calibration_offset = matrix::Vector3f{cal.x_offset, cal.y_offset, cal.z_offset};
-			_calibration_scale = matrix::Vector3f{cal.x_scale, cal.y_scale, cal.z_scale};
-		}
-
-		return PX4_OK;
-
-	case DEVIOCGDEVICEID:
-		return _sensor_accel_pub.get().device_id;
-
-	default:
-		return -ENOTTY;
-	}
+	UpdateCalibration();
+	ConfigureFilter(_param_imu_accel_cutoff.get());
 }
 
 void
@@ -93,6 +62,7 @@ PX4Accelerometer::set_device_type(uint8_t devtype)
 	device_id.devid_s.devtype = devtype;
 
 	// copy back to report
+	_device_id = device_id.devid;
 	_sensor_accel_pub.get().device_id = device_id.devid;
 }
 
@@ -104,8 +74,84 @@ PX4Accelerometer::set_sample_rate(unsigned rate)
 }
 
 void
+PX4Accelerometer::UpdateCalibration()
+{
+	for (unsigned i = 0; i < 3; ++i) {
+		char str[30] {};
+		sprintf(str, "CAL_ACC%u_ID", i);
+		int32_t device_id = -1;
+
+		if (param_get(param_find(str), &device_id) != OK) {
+			PX4_ERR("Could not access param %s", str);
+			continue;
+		}
+
+		if ((uint32_t)device_id != _device_id) {
+			continue;
+		}
+
+		// scale factors (x, y, z)
+		float scale[3] {};
+
+		sprintf(str, "CAL_ACC%u_XSCALE", i);
+
+		if (param_get(param_find(str), &scale[0]) != OK) {
+			PX4_ERR("Could not access param %s", str);
+		}
+
+		sprintf(str, "CAL_ACC%u_YSCALE", i);
+
+		if (param_get(param_find(str), &scale[1]) != OK) {
+			PX4_ERR("Could not access param %s", str);
+		}
+
+		sprintf(str, "CAL_ACC%u_ZSCALE", i);
+
+		if (param_get(param_find(str), &scale[2]) != OK) {
+			PX4_ERR("Could not access param %s", str);
+		}
+
+		// offsets factors (x, y, z)
+		float offset[3] {};
+		sprintf(str, "CAL_ACC%u_XOFF", i);
+
+		if (param_get(param_find(str), &offset[0]) != OK) {
+			PX4_ERR("Could not access param %s", str);
+		}
+
+		sprintf(str, "CAL_ACC%u_YOFF", i);
+
+		if (param_get(param_find(str), &offset[1]) != OK) {
+			PX4_ERR("Could not access param %s", str);
+		}
+
+		sprintf(str, "CAL_ACC%u_ZOFF", i);
+
+		if (param_get(param_find(str), &offset[2]) != OK) {
+			PX4_ERR("Could not access param %s", str);
+		}
+
+		_calibration_offset = matrix::Vector3f{offset};
+		_calibration_scale = matrix::Vector3f{scale};
+
+		return;
+	}
+}
+
+void
 PX4Accelerometer::update(hrt_abstime timestamp, float x, float y, float z)
 {
+	// check for parameter updates
+	if (_parameter_update_sub.updated()) {
+		// clear update
+		parameter_update_s pupdate;
+		_parameter_update_sub.copy(&pupdate);
+
+		// update parameters from storage
+		ModuleParams::updateParams();
+		UpdateCalibration();
+	}
+
 	sensor_accel_s &report = _sensor_accel_pub.get();
 	report.timestamp = timestamp;
 
@@ -140,15 +186,13 @@ PX4Accelerometer::update(hrt_abstime timestamp, float x, float y, float z)
 		report.y_integral = integrated_value(1);
 		report.z_integral = integrated_value(2);
 
-		poll_notify(POLLIN);
-		_sensor_accel_pub.update();
+		_sensor_accel_pub.update();	// publish
 	}
 }
 
 void
 PX4Accelerometer::print_status()
 {
-	PX4_INFO(ACCEL_BASE_DEVICE_PATH " device instance: %d", _class_device_instance);
 	PX4_INFO("sample rate: %d Hz", _sample_rate);
 	PX4_INFO("filter cutoff: %.3f Hz", (double)_filter.get_cutoff_freq());
 

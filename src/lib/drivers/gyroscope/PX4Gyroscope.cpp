@@ -37,51 +37,20 @@
 #include <lib/drivers/device/Device.hpp>
 
 PX4Gyroscope::PX4Gyroscope(uint32_t device_id, uint8_t priority, enum Rotation rotation) :
-	CDev(nullptr),
 	ModuleParams(nullptr),
 	_sensor_gyro_pub{ORB_ID(sensor_gyro), priority},
 	_sensor_gyro_control_pub{ORB_ID(sensor_gyro_control), priority},
+	_device_id(device_id),
 	_rotation{rotation}
 {
-	_class_device_instance = register_class_devname(GYRO_BASE_DEVICE_PATH);
-
 	_sensor_gyro_pub.get().device_id = device_id;
 	_sensor_gyro_pub.get().scaling = 1.0f;
 	_sensor_gyro_control_pub.get().device_id = device_id;
 
 	// set software low pass filter for controllers
 	updateParams();
-	configure_filter(_param_imu_gyro_cutoff.get());
-}
-
-PX4Gyroscope::~PX4Gyroscope()
-{
-	if (_class_device_instance != -1) {
-		unregister_class_devname(GYRO_BASE_DEVICE_PATH, _class_device_instance);
-	}
-}
-
-int
-PX4Gyroscope::ioctl(cdev::file_t *filp, int cmd, unsigned long arg)
-{
-	switch (cmd) {
-	case GYROIOCSSCALE: {
-			// Copy offsets and scale factors in
-			gyro_calibration_s cal{};
-			memcpy(&cal, (gyro_calibration_s *) arg, sizeof(cal));
-
-			_calibration_offset = matrix::Vector3f{cal.x_offset, cal.y_offset, cal.z_offset};
-			_calibration_scale = matrix::Vector3f{cal.x_scale, cal.y_scale, cal.z_scale};
-		}
-
-		return PX4_OK;
-
-	case DEVIOCGDEVICEID:
-		return _sensor_gyro_pub.get().device_id;
-
-	default:
-		return -ENOTTY;
-	}
+	UpdateCalibration();
+	ConfigureFilter(_param_imu_gyro_cutoff.get());
 }
 
 void
@@ -95,6 +64,7 @@ PX4Gyroscope::set_device_type(uint8_t devtype)
 	device_id.devid_s.devtype = devtype;
 
 	// copy back to report
+	_device_id = device_id.devid;
 	_sensor_gyro_pub.get().device_id = device_id.devid;
 	_sensor_gyro_control_pub.get().device_id = device_id.devid;
 }
@@ -107,8 +77,84 @@ PX4Gyroscope::set_sample_rate(unsigned rate)
 }
 
 void
+PX4Gyroscope::UpdateCalibration()
+{
+	for (unsigned i = 0; i < 3; ++i) {
+		char str[30] {};
+		sprintf(str, "CAL_GYRO%u_ID", i);
+		int32_t device_id = -1;
+
+		if (param_get(param_find(str), &device_id) != OK) {
+			PX4_ERR("Could not access param %s", str);
+			continue;
+		}
+
+		if ((uint32_t)device_id != _device_id) {
+			continue;
+		}
+
+		// scale factors (x, y, z)
+		float scale[3] {};
+
+		sprintf(str, "CAL_GYRO%u_XSCALE", i);
+
+		if (param_get(param_find(str), &scale[0]) != OK) {
+			PX4_ERR("Could not access param %s", str);
+		}
+
+		sprintf(str, "CAL_GYRO%u_YSCALE", i);
+
+		if (param_get(param_find(str), &scale[1]) != OK) {
+			PX4_ERR("Could not access param %s", str);
+		}
+
+		sprintf(str, "CAL_GYRO%u_ZSCALE", i);
+
+		if (param_get(param_find(str), &scale[2]) != OK) {
+			PX4_ERR("Could not access param %s", str);
+		}
+
+		// offsets factors (x, y, z)
+		float offset[3] {};
+		sprintf(str, "CAL_GYRO%u_XOFF", i);
+
+		if (param_get(param_find(str), &offset[0]) != OK) {
+			PX4_ERR("Could not access param %s", str);
+		}
+
+		sprintf(str, "CAL_GYRO%u_YOFF", i);
+
+		if (param_get(param_find(str), &offset[1]) != OK) {
+			PX4_ERR("Could not access param %s", str);
+		}
+
+		sprintf(str, "CAL_GYRO%u_ZOFF", i);
+
+		if (param_get(param_find(str), &offset[2]) != OK) {
+			PX4_ERR("Could not access param %s", str);
+		}
+
+		_calibration_offset = matrix::Vector3f{offset};
+		_calibration_scale = matrix::Vector3f{scale};
+
+		return;
+	}
+}
+
+void
 PX4Gyroscope::update(hrt_abstime timestamp, float x, float y, float z)
 {
+	// check for parameter updates
+	if (_parameter_update_sub.updated()) {
+		// clear update
+		parameter_update_s pupdate;
+		_parameter_update_sub.copy(&pupdate);
+
+		// update parameters from storage
+		ModuleParams::updateParams();
+		UpdateCalibration();
+	}
+
 	sensor_gyro_s &report = _sensor_gyro_pub.get();
 	report.timestamp = timestamp;
 
@@ -164,7 +210,6 @@ PX4Gyroscope::update(hrt_abstime timestamp, float x, float y, float z)
 		report.y_integral = integrated_value(1);
 		report.z_integral = integrated_value(2);
 
-		poll_notify(POLLIN);
 		_sensor_gyro_pub.update();	// publish
 	}
 }
@@ -172,7 +217,6 @@ PX4Gyroscope::update(hrt_abstime timestamp, float x, float y, float z)
 void
 PX4Gyroscope::print_status()
 {
-	PX4_INFO(GYRO_BASE_DEVICE_PATH " device instance: %d", _class_device_instance);
 	PX4_INFO("sample rate: %d Hz", _sample_rate);
 	PX4_INFO("filter cutoff: %.3f Hz", (double)_filter.get_cutoff_freq());
 
