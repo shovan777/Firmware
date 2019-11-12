@@ -81,6 +81,7 @@ TEST_F(ControlMathAttitudeMappingTest, AttitudeMappingUpsideDown)
 	 * order is: 1. roll, 2. pitch, 3. yaw */
 	checkDirection(Vector3f(0, 0, 1), 0);
 	checkEuler(M_PI_F, 0, 0);
+	Quatf(_attitude_setpoint.q_d).print();
 }
 
 TEST_F(ControlMathAttitudeMappingTest, AttitudeMappingUpsideDownYaw90)
@@ -89,7 +90,8 @@ TEST_F(ControlMathAttitudeMappingTest, AttitudeMappingUpsideDownYaw90)
 	 * reason: thrust points straight down and order Euler
 	 * order is: 1. roll, 2. pitch, 3. yaw */
 	checkDirection(Vector3f(0, 0, 1), M_PI_2_F);
-	checkEuler(-M_PI_F, 0, M_PI_2_F);
+	checkEuler(M_PI_F, 0, -M_PI_2_F);
+	Quatf(_attitude_setpoint.q_d).print();
 }
 
 TEST_F(ControlMathAttitudeMappingTest, AttitudeMappingRandomDirections)
