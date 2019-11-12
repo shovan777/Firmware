@@ -33,7 +33,6 @@
 px4_add_module(
 	MODULE modules__dataman
 	MAIN dataman
-	STACK_MAIN 1240
 	COMPILE_FLAGS
 		-Wno-cast-align # TODO: fix and enable
 	SRCS
