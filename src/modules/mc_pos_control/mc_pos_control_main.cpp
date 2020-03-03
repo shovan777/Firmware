@@ -909,6 +909,10 @@ MulticopterPositionControl::start_flight_task()
 		should_disable_task = false;
 	}
 
+	if (_vehicle_status.nav_state == vehicle_status_s::NAVIGATION_STATE_PAYLOAD_RELEASE) {
+		should_disable_task = false;
+	}
+
 	// check task failure
 	if (task_failure) {
 
