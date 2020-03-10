@@ -1070,16 +1070,23 @@ Commander::handle_command(vehicle_status_s *status_local, const vehicle_command_
 		}
 
 		break;
+
 	case vehicle_command_s::VEHICLE_CMD_DO_DROP:
-		PX4_INFO("hELLO i AM inside commander mavlink set me to drop");
+		PX4_INFO("hELLO i AM inside commander mavlink set me to drop again");
 
-
+		PX4_INFO("param1: %.f", (double)cmd.param1);
+		PX4_INFO("param2: %.f", (double)cmd.param2);
+		PX4_INFO("param3: %.f", (double)cmd.param3);
 		// Switch to payload release state and let the payload release task handle the command further
-		if (TRANSITION_DENIED != main_state_transition(*status_local, commander_state_s::MAIN_STATE_PAYLOAD_RELEASE, status_flags,
+		if (TRANSITION_DENIED != main_state_transition(*status_local, commander_state_s::MAIN_STATE_PAYLOAD_RELEASE,
+				status_flags,
 				&internal_state)) {
+			PX4_INFO("inside commander: Vehicle command is accepted");
 			cmd_result = vehicle_command_s::VEHICLE_CMD_RESULT_ACCEPTED;
 
 		} else {
+			PX4_INFO("inside commander: Vehicle command is rejected");
+
 			cmd_result = vehicle_command_s::VEHICLE_CMD_RESULT_TEMPORARILY_REJECTED;
 		}
 
@@ -3347,6 +3354,8 @@ Commander::update_control_mode()
 		break;
 
 	case vehicle_status_s::NAVIGATION_STATE_PAYLOAD_RELEASE:
+		// PX4_INFO("inside commander.cpp: nav state flags are set");
+
 		control_mode.flag_control_manual_enabled = false;
 		control_mode.flag_control_auto_enabled = false;
 		control_mode.flag_control_rates_enabled = true;

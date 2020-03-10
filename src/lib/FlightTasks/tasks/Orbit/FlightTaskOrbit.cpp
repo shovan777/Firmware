@@ -44,6 +44,7 @@ using namespace matrix;
 
 FlightTaskOrbit::FlightTaskOrbit() : _circle_approach_line(_position)
 {
+	PX4_INFO("flight task orbit has been initialized");
 	_sticks_data_required = false;
 }
 
@@ -142,6 +143,7 @@ bool FlightTaskOrbit::checkAcceleration(float r, float v, float a)
 
 bool FlightTaskOrbit::activate(vehicle_local_position_setpoint_s last_setpoint)
 {
+	PX4_INFO("flight task orbit has been activated");
 	bool ret = FlightTaskManualAltitudeSmooth::activate(last_setpoint);
 	_r = _radius_min;
 	_v =  1.f;
@@ -161,6 +163,7 @@ bool FlightTaskOrbit::activate(vehicle_local_position_setpoint_s last_setpoint)
 
 bool FlightTaskOrbit::update()
 {
+	PX4_INFO("flight task orbit has been updated");
 	// update altitude
 	FlightTaskManualAltitudeSmooth::update();
 

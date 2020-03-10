@@ -44,11 +44,13 @@ using namespace matrix;
 
 FlightTaskDrop::FlightTaskDrop() : _circle_approach_line(_position)
 {
+	PX4_INFO("drop task initialized");
 	_sticks_data_required = false;
 }
 
 bool FlightTaskDrop::applyCommandParameters(const vehicle_command_s &command)
 {
+	PX4_INFO("inside applyCommandParameters");
 	bool ret = true;
 	// save previous velocity and roatation direction
 	float v = fabsf(_v);
@@ -95,6 +97,8 @@ bool FlightTaskDrop::applyCommandParameters(const vehicle_command_s &command)
 
 bool FlightTaskDrop::sendTelemetry()
 {
+	PX4_INFO("inside sendTelemetry");
+
 	orbit_status_s orbit_status{};
 	orbit_status.timestamp = hrt_absolute_time();
 	orbit_status.radius = math::signNoZero(_v) * _r;
@@ -112,6 +116,8 @@ bool FlightTaskDrop::sendTelemetry()
 
 bool FlightTaskDrop::setRadius(float r)
 {
+	PX4_INFO("inside setRadius");
+
 	// clip the radius to be within range
 	r = math::constrain(r, _radius_min, _radius_max);
 
@@ -126,6 +132,8 @@ bool FlightTaskDrop::setRadius(float r)
 
 bool FlightTaskDrop::setVelocity(const float v)
 {
+	PX4_INFO("inside setVelocity");
+
 	if (fabs(v) < _velocity_max &&
 	    checkAcceleration(_r, v, _acceleration_max)) {
 		_v = v;
@@ -142,6 +150,8 @@ bool FlightTaskDrop::checkAcceleration(float r, float v, float a)
 
 bool FlightTaskDrop::activate(vehicle_local_position_setpoint_s last_setpoint)
 {
+	PX4_INFO("inside activate");
+
 	bool ret = FlightTaskManualAltitudeSmooth::activate(last_setpoint);
 	_r = _radius_min;
 	_v =  1.f;
@@ -161,6 +171,8 @@ bool FlightTaskDrop::activate(vehicle_local_position_setpoint_s last_setpoint)
 
 bool FlightTaskDrop::update()
 {
+	PX4_INFO("inside update");
+
 	// update altitude
 	FlightTaskManualAltitudeSmooth::update();
 
@@ -191,6 +203,8 @@ bool FlightTaskDrop::update()
 
 void FlightTaskDrop::generate_circle_approach_setpoints()
 {
+	PX4_INFO("inside applyCommandParameters");
+
 	if (_circle_approach_line.isEndReached()) {
 		// calculate target point on circle and plan a line trajectory
 		Vector2f start_to_center = _center - Vector2f(_position);
@@ -211,6 +225,8 @@ void FlightTaskDrop::generate_circle_approach_setpoints()
 
 void FlightTaskDrop::generate_circle_setpoints(Vector2f center_to_position)
 {
+	PX4_INFO("inside applyCommandParameters");
+
 	// xy velocity to go around in a circle
 	Vector2f velocity_xy(-center_to_position(1), center_to_position(0));
 	velocity_xy = velocity_xy.unit_or_zero();
